@@ -2,50 +2,27 @@ name: Notify Discord on Issues
 
 on:
   issues:
-    types: [opened, edited, closed, reopened]
-  issue_comment:
-    types: [created]
+    types: [opened, closed]
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare payload for issue events
-        if: ${{ github.event_name == 'issues' }}
+      - name: Prepare payload
         run: |
           python3 - <<'PY'
           import json, os
           ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
-          issue = ev['issue']
-          action = ev['action']
+          issue = ev['issue']; action = ev['action']
           body = (issue.get('body') or '')[:300]
           payload = {
             "username": "GitHub Notifier",
             "content": f"**[#{issue['number']}] {issue['title']}** ({action})\nBy: {issue['user']['login']}\n{issue['html_url']}"
           }
           if body:
-            payload["embeds"] = [{"title": "Issue Preview", "description": body, "url": issue["html_url"]}]
+            payload["embeds"] = [{"title":"Issue Preview","description": body,"url": issue["html_url"]}]
           open('payload.json','w').write(json.dumps(payload))
           PY
-
-      - name: Prepare payload for comment events
-        if: ${{ github.event_name == 'issue_comment' }}
-        run: |
-          python3 - <<'PY'
-          import json, os
-          ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
-          issue = ev['issue']
-          comment = ev['comment']
-          body = (comment.get('body') or '')[:500]
-          payload = {
-            "username": "GitHub Notifier",
-            "content": f"**New comment on:** {issue['title']}\nBy: {comment['user']['login']}\n{comment['html_url']}"
-          }
-          if body:
-            payload["embeds"] = [{"description": body}]
-          open('payload.json','w').write(json.dumps(payload))
-          PY
-
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
