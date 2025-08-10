@@ -10,83 +10,44 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Should notify? (issues)
-        id: gate
-        if: github.event_name == 'issues'
-        run: |
-          ACTION="${{ github.event.action }}"
-          LABELS="$(python3 - <<'PY'
-import json,sys
-ev=json.loads(open(os.environ['GITHUB_EVENT_PATH']).read()) if False else {}
-PY
-)"
-        shell: bash
-      - name: Compute labels
-        if: github.event_name == 'issues'
-        id: labels
+      - name: Prepare payload for issue events
+        if: ${{ github.event_name == 'issues' }}
         run: |
           python3 - <<'PY'
 import json, os
 ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
-labels = [l['name'] for l in ev['issue'].get('labels',[])]
-cond = ('announce' in [x.lower() for x in labels]) or (ev['action'] == 'closed')
-# Write a tiny flag file
-open('notify.flag','w').write('1' if cond else '0')
+issue = ev['issue']
+action = ev['action']
+body = (issue.get('body') or '')[:300]
+payload = {
+  "username": "GitHub Notifier",
+  "content": f"**[#{issue['number']}] {issue['title']}** ({action})\nBy: {issue['user']['login']}\n{issue['html_url']}"
+}
+if body:
+  payload["embeds"] = [{"title":"Issue Preview","description": body,"url": issue["html_url"]}]
+open('payload.json','w').write(json.dumps(payload))
 PY
-      - name: Skip if not matching rule
-        if: github.event_name == 'issues'
+
+      - name: Prepare payload for comment events
+        if: ${{ github.event_name == 'issue_comment' }}
         run: |
-          if [ "$(cat notify.flag)" != "1" ]; then
-            echo "No announce label and not closed → skipping."
-            exit 78
-          fi
-
-      - name: Build Discord message (Issue events)
-        if: github.event_name == 'issues'
-        run: |
-          TITLE="${{ github.event.issue.title }}"
-          URL="${{ github.event.issue.html_url }}"
-          USER="${{ github.event.issue.user.login }}"
-          ACTION="${{ github.event.action }}"
-          BODY=$(printf "%s" "${{ github.event.issue.body }}" | head -c 300)
-
-          cat > payload.json <<EOF
-          {
-            "username": "GitHub Notifier",
-            "content": "**[#${{ github.event.issue.number }}] ${TITLE}** (${ACTION})\\nBy: ${USER}\\n${URL}",
-            "embeds": [
-              {
-                "title": "Issue Preview",
-                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')},
-                "url": "${URL}"
-              }
-            ]
-          }
-          EOF
-
-      - name: Build Discord message (Comments)
-        if: github.event_name == 'issue_comment'
-        run: |
-          TITLE="${{ github.event.issue.title }}"
-          URL="${{ github.event.comment.html_url }}"
-          USER="${{ github.event.comment.user.login }}"
-          BODY=$(printf "%s" "${{ github.event.comment.body }}" | head -c 500)
-
-          cat > payload.json <<EOF
-          {
-            "username": "GitHub Notifier",
-            "content": "**New comment on:** ${TITLE}\\nBy: ${USER}\\n${URL}",
-            "embeds": [
-              {
-                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}
-              }
-            ]
-          }
-          EOF
+          python3 - <<'PY'
+import json, os
+ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
+issue = ev['issue']; comment = ev['comment']
+body = (comment.get('body') or '')[:500]
+payload = {
+  "username": "GitHub Notifier",
+  "content": f"**New comment on:** {issue['title']}\nBy: {comment['user']['login']}\n{comment['html_url']}"
+}
+if body:
+  payload["embeds"] = [{"description": body}]
+open('payload.json','w').write(json.dumps(payload))
+PY
 
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -sS -X POST -H "Content-Type: application/json" \
+          curl -sS -f -X POST -H "Content-Type: application/json" \
             -d @payload.json "$DISCORD_WEBHOOK_URL"
