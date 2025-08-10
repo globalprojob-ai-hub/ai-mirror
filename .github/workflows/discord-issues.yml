@@ -1,0 +1,61 @@
+name: Notify Discord on Issues
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Discord message (Issue events)
+        if: github.event_name == 'issues'
+        run: |
+          TITLE="${{ github.event.issue.title }}"
+          URL="${{ github.event.issue.html_url }}"
+          USER="${{ github.event.issue.user.login }}"
+          ACTION="${{ github.event.action }}"
+          BODY=$(printf "%s" "${{ github.event.issue.body }}" | head -c 300)
+
+          cat > payload.json <<EOF
+          {
+            "username": "GitHub Notifier",
+            "content": "**[#${{ github.event.issue.number }}] ${TITLE}** (${ACTION})\\nBy: ${USER}\\n${URL}",
+            "embeds": [
+              {
+                "title": "Issue Preview",
+                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')},
+                "url": "${URL}"
+              }
+            ]
+          }
+          EOF
+
+      - name: Build Discord message (Comments)
+        if: github.event_name == 'issue_comment'
+        run: |
+          TITLE="${{ github.event.issue.title }}"
+          URL="${{ github.event.comment.html_url }}"
+          USER="${{ github.event.comment.user.login }}"
+          BODY=$(printf "%s" "${{ github.event.comment.body }}" | head -c 500)
+
+          cat > payload.json <<EOF
+          {
+            "username": "GitHub Notifier",
+            "content": "**New comment on:** ${TITLE}\\nBy: ${USER}\\n${URL}",
+            "embeds": [
+              {
+                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}
+              }
+            ]
+          }
+          EOF
+
+      - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d @payload.json "$DISCORD_WEBHOOK_URL"
