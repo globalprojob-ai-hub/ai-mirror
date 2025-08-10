@@ -10,6 +10,37 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      - name: Should notify? (issues)
+        id: gate
+        if: github.event_name == 'issues'
+        run: |
+          ACTION="${{ github.event.action }}"
+          LABELS="$(python3 - <<'PY'
+import json,sys
+ev=json.loads(open(os.environ['GITHUB_EVENT_PATH']).read()) if False else {}
+PY
+)"
+        shell: bash
+      - name: Compute labels
+        if: github.event_name == 'issues'
+        id: labels
+        run: |
+          python3 - <<'PY'
+import json, os
+ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
+labels = [l['name'] for l in ev['issue'].get('labels',[])]
+cond = ('announce' in [x.lower() for x in labels]) or (ev['action'] == 'closed')
+# Write a tiny flag file
+open('notify.flag','w').write('1' if cond else '0')
+PY
+      - name: Skip if not matching rule
+        if: github.event_name == 'issues'
+        run: |
+          if [ "$(cat notify.flag)" != "1" ]; then
+            echo "No announce label and not closed → skipping."
+            exit 78
+          fi
+
       - name: Build Discord message (Issue events)
         if: github.event_name == 'issues'
         run: |
