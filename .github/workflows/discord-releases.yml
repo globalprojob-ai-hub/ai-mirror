@@ -1,0 +1,36 @@
+name: Notify Discord on Releases
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Discord message (Release)
+        run: |
+          NAME="${{ github.event.release.name }}"
+          TAG="${{ github.event.release.tag_name }}"
+          URL="${{ github.event.release.html_url }}"
+          BODY=$(printf "%s" "${{ github.event.release.body }}" | head -c 800)
+
+          cat > payload.json <<EOF
+          {
+            "username": "GitHub Notifier",
+            "content": "**New Release:** ${NAME} (${TAG})\\n${URL}",
+            "embeds": [
+              {
+                "title": "Release Notes",
+                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')},
+                "url": "${URL}"
+              }
+            ]
+          }
+          EOF
+      - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d @payload.json "$DISCORD_WEBHOOK_URL"
