@@ -8,29 +8,24 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Build Discord message (Release)
+      - name: Prepare payload for Release
         run: |
-          NAME="${{ github.event.release.name }}"
-          TAG="${{ github.event.release.tag_name }}"
-          URL="${{ github.event.release.html_url }}"
-          BODY=$(printf "%s" "${{ github.event.release.body }}" | head -c 800)
-
-          cat > payload.json <<EOF
-          {
-            "username": "GitHub Notifier",
-            "content": "**New Release:** ${NAME} (${TAG})\\n${URL}",
-            "embeds": [
-              {
-                "title": "Release Notes",
-                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')},
-                "url": "${URL}"
-              }
-            ]
-          }
-          EOF
+          python3 - <<'PY'
+import json, os
+ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
+rel = ev['release']
+body = (rel.get('body') or '')[:800]
+payload = {
+  "username": "GitHub Notifier",
+  "content": f"**New Release:** {rel.get('name') or rel['tag_name']} ({rel['tag_name']})\n{rel['html_url']}"
+}
+if body:
+  payload["embeds"] = [{"title":"Release Notes","description": body,"url": rel["html_url"]}]
+open('payload.json','w').write(json.dumps(payload))
+PY
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -sS -X POST -H "Content-Type: application/json" \
+          curl -sS -f -X POST -H "Content-Type: application/json" \
             -d @payload.json "$DISCORD_WEBHOOK_URL"
