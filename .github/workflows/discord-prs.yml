@@ -1,0 +1,41 @@
+name: Notify Discord on Pull Requests
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Discord message (PR)
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          URL="${{ github.event.pull_request.html_url }}"
+          USER="${{ github.event.pull_request.user.login }}"
+          ACTION="${{ github.event.action }}"
+          MERGED="${{ github.event.pull_request.merged }}"
+          if [ "$ACTION" = "closed" ] && [ "$MERGED" = "true" ]; then
+            ACTION="merged"
+          fi
+          BODY=$(printf "%s" "${{ github.event.pull_request.body }}" | head -c 300)
+
+          cat > payload.json <<EOF
+          {
+            "username": "GitHub Notifier",
+            "content": "**PR:** ${TITLE} (${ACTION})\\nBy: ${USER}\\n${URL}",
+            "embeds": [
+              {
+                "title": "PR Preview",
+                "description": ${BODY:+$(printf '%s' "$BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')},
+                "url": "${URL}"
+              }
+            ]
+          }
+          EOF
+      - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H "Content-Type: application/json" \
+            -d @payload.json "$DISCORD_WEBHOOK_URL"
