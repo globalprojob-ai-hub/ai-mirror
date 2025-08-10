@@ -11,21 +11,22 @@ jobs:
       - name: Prepare payload for PR
         run: |
           python3 - <<'PY'
-import json, os
-ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
-pr = ev['pull_request']
-action = ev['action']
-if action == 'closed' and pr.get('merged'):
-    action = 'merged'
-body = (pr.get('body') or '')[:300]
-payload = {
-  "username": "GitHub Notifier",
-  "content": f"**PR:** {pr['title']} ({action})\nBy: {pr['user']['login']}\n{pr['html_url']}"
-}
-if body:
-  payload["embeds"] = [{"title":"PR Preview","description": body,"url": pr["html_url"]}]
-open('payload.json','w').write(json.dumps(payload))
-PY
+          import json, os
+          ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
+          pr = ev['pull_request']
+          action = ev['action']
+          if action == 'closed' and pr.get('merged'):
+              action = 'merged'
+          body = (pr.get('body') or '')[:300]
+          payload = {
+            "username": "GitHub Notifier",
+            "content": f"**PR:** {pr['title']} ({action})\nBy: {pr['user']['login']}\n{pr['html_url']}"
+          }
+          if body:
+            payload["embeds"] = [{"title":"PR Preview","description": body,"url": pr["html_url"]}]
+          open('payload.json','w').write(json.dumps(payload))
+          PY
+
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
