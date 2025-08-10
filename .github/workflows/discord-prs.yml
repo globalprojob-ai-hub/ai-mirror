@@ -2,19 +2,23 @@ name: Notify Discord on Pull Requests
 
 on:
   pull_request:
-    types: [opened, ready_for_review, reopened, closed]
+    types: [opened, closed]  # merged da 'closed' içinde gelir
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Prepare payload for PR
+      - name: Skip if closed but not merged
+        if: ${{ github.event.action == 'closed' && !github.event.pull_request.merged }}
+        run: |
+          echo "Closed but NOT merged -> skip"; exit 78
+
+      - name: Prepare payload
         run: |
           python3 - <<'PY'
           import json, os
           ev = json.loads(open(os.environ['GITHUB_EVENT_PATH']).read())
-          pr = ev['pull_request']
-          action = ev['action']
+          pr = ev['pull_request']; action = ev['action']
           if action == 'closed' and pr.get('merged'):
               action = 'merged'
           body = (pr.get('body') or '')[:300]
@@ -26,7 +30,6 @@ jobs:
             payload["embeds"] = [{"title":"PR Preview","description": body,"url": pr["html_url"]}]
           open('payload.json','w').write(json.dumps(payload))
           PY
-
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
