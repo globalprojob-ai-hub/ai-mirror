@@ -23,3 +23,15 @@ AI Mirror is a smart home device designed to recognize household members and pro
 git clone https://github.com/globalprojob-ai-hub/ai-mirror.git
 cd ai-mirror
 npm install
+```
+
+## Usage
+```bash
+npm start
+```
+
+## Contributing
+Please read the CONTRIBUTING.md before submitting pull requests.
+
+## License
+MIT License © 2025 GlobalProJob Ltd
