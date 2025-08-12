@@ -1,3 +1,6 @@
+![CI](https://github.com/globalprojob/ai-mirror/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+
 # AI Mirror
 Smart mirror with facial recognition and AI-powered personal assistant.
 
